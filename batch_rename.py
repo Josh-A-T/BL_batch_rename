@@ -41,9 +41,9 @@ class OBJECT_OT_batch_rename(Operator):
                 new_name += original_name
             if props.add_numbers:
                 if props.number_position == 'SUFFIX':
-                    new_name += props.number_seperator + str(i + props.start_number).zfill(props.padding)
+                    new_name += props.number_separator + str(i + props.start_number).zfill(props.padding)
                 else:
-                    new_name = str(i, props.start_number).zfill(props.padding) + props.number_seperator + new_name
+                    new_name = str(i, props.start_number).zfill(props.padding) + props.number_separator + new_name
             if props.suffix:
                 new_name += props.suffix
             if new_name and new_name != obj.name:
@@ -66,7 +66,7 @@ class OBJECT_OT_clear_rename_settings(Operator):
         props.add_numbers = True
         props.start_number = 1
         props.padding = 2
-        props.number_seperator = "_"
+        props.number_separator = "_"
         props.number_position = 'SUFFIX'
         props.remove_numbers = False
         props.sort_by_name = True
@@ -118,8 +118,8 @@ class BatchRenameProperties(bpy.types.PropertyGroup):
         max=6,
     )
     
-    number_seperator: StringProperty(
-        name="Seperator",
+    number_separator: StringProperty(
+        name="separator",
         description="Character between name and number",
         default="_",
         maxlen=3,
@@ -166,7 +166,7 @@ class VIEW3D_PT_batch_rename(Panel):
         if selected_count == 0:
             box.label(text="Selected objects to rename", icon='INFO')
             return
-        layout.seperator()
+        layout.separator()
         layout.label(text="Name Components:", icon='SORTALPHA')
         
         col = layout.column(align=True)
@@ -175,7 +175,7 @@ class VIEW3D_PT_batch_rename(Panel):
         row = col.row(align=True)
         row.prop(props, "use_base_name", text="", icon='FILE_TEXT')
         sub = row.row(align=True)
-        sub.enabled = props.use_base_name
+        sub.enabled = props.base_name
         sub.prop(props, "base_name", texts="")
         
         if not props.use_base_name:
@@ -183,7 +183,7 @@ class VIEW3D_PT_batch_rename(Panel):
         
         col.props(props, "suffix")
         
-        layout.seperator()
+        layout.separator()
         layout.label(text="Numbering:", icon='LINENUMBERS_ON')
         
         col = layout.column(align=True)
@@ -196,9 +196,9 @@ class VIEW3D_PT_batch_rename(Panel):
             row.prop(props, "start_number")
             row.prop(props, "padding")
             
-            col.prop(props, "number_seperator")
+            col.prop(props, "number_separator")
             col.prop(props, "sort_by_name")
-        layout.seperator()
+        layout.separator()
         
         if selected_count > 0:
             box = layout.box()
@@ -211,7 +211,7 @@ class VIEW3D_PT_batch_rename(Panel):
                 row.label(text=f"{obj.name} → {preview_name}", icon='FORWARD')
             if len(context.selected_objects) > 3:
                 box.label(text=f"... and {len(context.selcted_objects) -3 } more")
-        layout.seperator()
+        layout.separator()
         
         col = layout.column(align=True)
         col.scale_y = 1.2
@@ -236,9 +236,9 @@ class VIEW3D_PT_batch_rename(Panel):
         if props.add_numbers:
             number_str = str(index + props.start_number).zFill(props.padding)
             if props.number_position == "SUFFIX":
-                new_name += props.number_seperator + number_str
+                new_name += props.number_separator + number_str
             else:
-                new_name += number_str + props.number_seperator + new_name
+                new_name += number_str + props.number_separator + new_name
         
         if props.suffix:
             new_name += props.suffix
@@ -252,12 +252,27 @@ classes = [
 ]
 
 def register():
-    bpy.utils.register_classes_factory(classes)
-    bpy.types.Scene.batch_rename_props = bpy.props.PointerProperty(type=BatchRenameProperties)
+    for cls in classes:
+        try:
+            bpy.utils.register_class(cls)
+        except ValueError:
+            print(f"Class {cls} already registered")
+    
+    
+    if not hasattr(bpy.types.Scene, 'batch_rename_props'):
+        bpy.types.Scene.batch_rename_props = bpy.props.PointerProperty(type=BatchRenameProperties)
+    else:
+        print("batch_rename_props already exists in Scene")
 
 def unregister():
-    bpy.utils.unregister_classes_factory(classes)
-    del bpy.types.Scene.batch_rename_props
+    for cls in reversed(classes):
+        try:
+            bpy.utils.unregister_class(cls)
+        except RuntimeError:
+            print(f"Class {cls} was not registered")
+    
+    if hasattr(bpy.types.Scene, 'batch_rename_props'):
+        del bpy.types.Scene.batch_rename_props
 
 if __name__ == "__main__":
     register()
