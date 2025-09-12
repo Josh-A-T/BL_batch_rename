@@ -38,13 +38,13 @@ In the future will add the ability to automatically add renamed objects to new g
 
 
 ## Dependencies
-    Blender 4 and up
+Blender 4 and up
 
 ## Contributing
-    Fork the repository.
-    Create a new branch.
-    Make your changes.
-    Submit a pull request.
+1.Fork the repository.
+2.Create a new branch.
+3.Make your changes.
+4.Submit a pull request.
 
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details.
