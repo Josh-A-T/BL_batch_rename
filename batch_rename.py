@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Batch Rename",
     "author": "Josh T",
-    "version": (0, 0, 2),
+    "version": (1, 0, 0),
     "blender": (4, 1, 0),
     "location": "View3D > Sidebar > Tool Tab",
-    "description": "Batch rename selected objects with prefixes, suffixes, and numbering",
+    "description": "Batch rename selected objects with prefixes, suffixes, numbering, and collection assignment",
     "category": "Object"
 }
 
@@ -42,8 +42,24 @@ class OBJECT_OT_batch_rename(Operator):
         suffix = props.suffix
         base_name = props.base_name
         
+        target_collection = None
+        if props.add_to_collection:
+            if props.collection_option == 'NEW':
+                collection_name = props.new_collection_name if props.new_collection_name else "Renamed_Objects"
+                target_collection = bpy.data.collections.new(collection_name)
+                context.scene.collection.children.link(target_collection)
+            else:  
+                if props.existing_collection:
+                    target_collection = bpy.data.collections.get(props.existing_collection)
+                    if not target_collection:
+                        self.report({'WARNING'}, f"Collection '{props.existing_collection}' not found")
+                        return {'CANCELLED'}
+        
+        renamed_objects = []
+        
         for i, obj in enumerate(selected_objects):
             new_name = ""
+            original_name = obj.name
             
             if prefix:
                 new_name += prefix
@@ -51,7 +67,6 @@ class OBJECT_OT_batch_rename(Operator):
             if use_base_name and base_name:
                 new_name += base_name
             elif not use_base_name:
-                original_name = obj.name
                 if remove_numbers:
                     original_name = NUMBER_PATTERN.sub('', original_name)
                 new_name += original_name
@@ -65,10 +80,29 @@ class OBJECT_OT_batch_rename(Operator):
             
             if suffix:
                 new_name += suffix
+                
+            if props.search_pattern:
+                try:
+                    new_name = re.sub(props.search_pattern, props.replace_pattern, new_name)
+                except re.error:
+                    self.report({'WARNING'}, "Invalid search pattern")
+                    return {'CANCELLED'}
+            
             if new_name and new_name != obj.name:
                 obj.name = new_name
+                renamed_objects.append(obj)
+        
+        if target_collection and renamed_objects:
+            for obj in renamed_objects:
+                if obj.name not in target_collection.objects:
+                    for coll in obj.users_collection:
+                        if coll != context.scene.collection:
+                            coll.objects.unlink(obj)
+                    target_collection.objects.link(obj)
         
         self.report({'INFO'}, f"Renamed {len(selected_objects)} objects")
+        if target_collection:
+            self.report({'INFO'}, f"Added to collection: {target_collection.name}")
         return {'FINISHED'}
 
 
@@ -90,8 +124,32 @@ class OBJECT_OT_clear_rename_settings(Operator):
         props.number_position = 'SUFFIX'
         props.remove_numbers = False
         props.sort_by_name = True
+        props.search_pattern = ""
+        props.replace_pattern = ""
+        props.add_to_collection = False
+        props.collection_option = 'NEW'
+        props.new_collection_name = "Renamed_Objects"
+        props.existing_collection = ""
         return {'FINISHED'}
 
+#####-----Properties-----#####
+# Prefix
+# Suffix
+# searh_pattern
+# replace_pattern
+# base_name
+# use_base_name
+# add_numbers
+# start_number
+# padding
+# number_separator
+# number_position
+# remove_numbers
+# sort_by_name
+# add_to_collection
+# collection_options
+# new_collection name
+# existing collection
 
 class BatchRenameProperties(PropertyGroup):
     prefix: StringProperty(
@@ -103,6 +161,18 @@ class BatchRenameProperties(PropertyGroup):
     suffix: StringProperty(
         name="Suffix",
         description="Text to add after object names",
+        default="",
+    )
+    
+    search_pattern: StringProperty(
+        name="Search",
+        description="Text pattern to search for in object names",
+        default="",
+    )
+    
+    replace_pattern: StringProperty(
+        name="Replace",
+        description="Text to replace found patterns with",
         default="",
     )
     
@@ -167,6 +237,34 @@ class BatchRenameProperties(PropertyGroup):
         description="Sort objects alphabetically before numbering",
         default=True,
     )
+    
+    add_to_collection: BoolProperty(
+        name="Add to Collection",
+        description="Add renamed objects to a collection",
+        default=False,
+    )
+    
+    collection_option: EnumProperty(
+        name="Collection Option",
+        description="Choose whether to create a new collection or use an existing one",
+        items=[
+            ('NEW', 'New Collection', 'Create a new collection for the renamed objects'),
+            ('EXISTING', 'Existing Collection', 'Add to an existing collection'),
+        ],
+        default='NEW',
+    )
+    
+    new_collection_name: StringProperty(
+        name="New Collection Name",
+        description="Name for the new collection",
+        default="Renamed_Objects",
+    )
+    
+    existing_collection: StringProperty(
+        name="Existing Collection",
+        description="Name of existing collection to add objects to",
+        default="",
+    )
 
 
 class VIEW3D_PT_batch_renamer(Panel):
@@ -204,6 +302,13 @@ class VIEW3D_PT_batch_renamer(Panel):
         
         col.prop(props, "suffix")
 
+        # Search and replace
+        layout.separator()
+        layout.label(text="Search & Replace:", icon='VIEWZOOM')
+        col = layout.column(align=True)
+        col.prop(props, "search_pattern")
+        col.prop(props, "replace_pattern")
+
         layout.separator()
         layout.label(text="Numbering:", icon='LINENUMBERS_ON')
         
@@ -220,7 +325,23 @@ class VIEW3D_PT_batch_renamer(Panel):
             col.prop(props, "number_separator")
             col.prop(props, "sort_by_name")
 
+        # Collection options
+        layout.separator()
+        layout.label(text="Collection Options:", icon='OUTLINER_COLLECTION')
+        col = layout.column(align=True)
+        col.prop(props, "add_to_collection")
+        
+        if props.add_to_collection:
+            col.prop(props, "collection_option", expand=True)
+            
+            if props.collection_option == 'NEW':
+                col.prop(props, "new_collection_name")
+            else: 
+                row = col.row(align=True)
+                row.prop_search(props, "existing_collection", bpy.data, "collections", text="Collection")
+                row.operator("object.refresh_collections", text="", icon='FILE_REFRESH')
     
+        # Preview
         if selected_count > 0:
             layout.separator()
             box = layout.box()
@@ -265,14 +386,30 @@ class VIEW3D_PT_batch_renamer(Panel):
         if props.suffix:
             new_name += props.suffix
         
+        if props.search_pattern:
+            try:
+                new_name = re.sub(props.search_pattern, props.replace_pattern, new_name)
+            except re.error:
+                pass  
+        
         return new_name if new_name else obj.name
 
 
-# Registration
+class OBJECT_OT_refresh_collections(Operator):
+    bl_idname = "object.refresh_collections"
+    bl_label = "Refresh Collections"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        self.report({'INFO'}, "Collection list refreshed")
+        return {'FINISHED'}
+
+
 classes = (
     BatchRenameProperties,
     OBJECT_OT_batch_rename,
     OBJECT_OT_clear_rename_settings,
+    OBJECT_OT_refresh_collections,
     VIEW3D_PT_batch_renamer,
 )
 
@@ -282,21 +419,25 @@ def register():
     except:
         pass
     
+    if hasattr(bpy.types.Scene, 'batch_renamer_props'):
+        try:
+            del bpy.types.Scene.batch_renamer_props
+        except:
+            pass
+    
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
-        except:
-            print(f"Failed to register {cls}")
-    
-    if not hasattr(bpy.types.Scene, 'batch_renamer_props'):
-        bpy.types.Scene.batch_renamer_props = bpy.props.PointerProperty(type=BatchRenameProperties)
+        except Exception as e:
+            print(f"Failed to register {cls}: {e}")
+    bpy.types.Scene.batch_renamer_props = bpy.props.PointerProperty(type=BatchRenameProperties)
 
 def unregister():
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
         except:
-            print(f"Failed to unregister {cls}")
+            pass
     
     if hasattr(bpy.types.Scene, 'batch_renamer_props'):
         try:

@@ -1,13 +1,12 @@
-# BL_batch_rename
+# Blender batch rename
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.6%2B-blue)](https://www.python.org/)
 
 Blender plugin to batch rename objects and add prefixes, postfixes, numbering, padding and seperators
 Simplifies the process of renaming objects in bulk and increases productivity while working with large scenes in Blender.
+Can now also add renamed objects to a new or existing group. With this Im calling it feature complete 1.0 as I dont know what can be added really
 
-
-In the future will add the ability to automatically add renamed objects to new group
 
 ## Installation
     1. Download the batch_rename.py file.
